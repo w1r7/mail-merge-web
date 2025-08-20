@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mail Merge Tool</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl bg-white shadow-xl rounded-2xl p-6">
+    <h1 class="text-2xl font-bold text-center mb-2">📄 Mail Merge Tool</h1>
+    <p class="text-center text-gray-600 mb-6">Upload Excel + Word template(s), choose a row range, and download the merged file. Brisbane time used for filenames.</p>
+
+    <form id="mergeForm" class="space-y-5">
+      <div>
+        <label class="block font-medium">Upload Excel (.xlsx)</label>
+        <input type="file" name="excel" accept=".xlsx" required class="mt-2 w-full" />
+      </div>
+      <div>
+        <label class="block font-medium">Upload Word Template(s) (.docx)</label>
+        <input type="file" name="templates" accept=".docx" multiple required class="mt-2 w-full" />
+        <p class="text-sm text-gray-500">You can upload one or more templates.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block font-medium">Row start (≥ 4)</label>
+          <input type="number" name="row_start" min="4" required class="mt-2 w-full border rounded-lg p-2" />
+        </div>
+        <div>
+          <label class="block font-medium">Row end (≥ 4)</label>
+          <input type="number" name="row_end" min="4" required class="mt-2 w-full border rounded-lg p-2" />
+        </div>
+      </div>
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-xl hover:bg-blue-700">🚀 Run Mail Merge</button>
+    </form>
+
+    <div id="progressWrap" class="mt-6 hidden">
+      <div class="flex items-center justify-between mb-2">
+        <span id="progressLabel" class="text-sm font-medium text-gray-700">Starting…</span>
+        <span id="etaLabel" class="text-sm text-gray-500">ETA: —</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-3">
+        <div id="progressBar" class="bg-blue-600 h-3 rounded-full" style="width:0%"></div>
+      </div>
+      <div id="resultLink" class="mt-3 text-center"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('mergeForm');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const progressLabel = document.getElementById('progressLabel');
+    const etaLabel = document.getElementById('etaLabel');
+    const resultLink = document.getElementById('resultLink');
+
+    const fmtETA = (s) => {
+      if (s == null) return '—';
+      s = Math.max(0, Number(s) || 0);
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      return `${m}:${r.toString().padStart(2, '0')}`;
+    };
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const rs = Number(fd.get('row_start'));
+      const re = Number(fd.get('row_end'));
+      if (rs < 4 || re < 4) { alert('❌ Rows must be ≥ 4'); return; }
+      if (rs > re) { alert('Row start cannot be greater than row end.'); return; }
+
+      progressWrap.classList.remove('hidden');
+      progressBar.style.width = '0%';
+      progressLabel.textContent = 'Uploading…';
+      etaLabel.textContent = 'ETA: —';
+      resultLink.innerHTML = '';
+
+      const res = await fetch('/start', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { alert('❌ ' + (data.error || 'Failed to start')); return; }
+
+      const jobId = data.job_id;
+      const timer = setInterval(async () => {
+        const pr = await fetch(`/progress/${jobId}`);
+        const pj = await pr.json();
+        if (pj.error) { clearInterval(timer); alert('❌ ' + pj.error); return; }
+
+        progressBar.style.width = `${pj.progress || 0}%`;
+        progressLabel.textContent = pj.message || '';
+        etaLabel.textContent = 'ETA: ' + fmtETA(pj.eta_seconds);
+
+        if (pj.status === 'done') {
+          clearInterval(timer);
+          resultLink.innerHTML = `<a href="/download/${jobId}" class="inline-block mt-2 text-blue-700 underline">⬇️ Download ${pj.result_name || 'result'}</a>`;
+        } else if (pj.status === 'error') {
+          clearInterval(timer);
+          alert('❌ ' + (pj.message || 'Error'));
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
