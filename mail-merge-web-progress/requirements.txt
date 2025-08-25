@@ -1,4 +1,7 @@
-flask
-python-docx
-pandas
-openpyxl
+flask==3.0.3
+gunicorn==22.0.0
+pandas==2.3.1
+openpyxl==3.1.5
+python-docx==1.1.2
+pytz==2024.1
+DocxCompose==1.4.0
